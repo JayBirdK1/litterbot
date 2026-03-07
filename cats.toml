@@ -1,0 +1,28 @@
+# cats.toml — Cat weight band configuration for the Litter-Robot 4 Health Tracker
+#
+# The LR4's built-in scale records a weight reading on each cat-detect event.
+# Define one [[cats]] entry per cat. On each ingest run the pipeline checks
+# every weight reading against these bands and assigns the matching cat.
+#
+# Rules:
+#   - Bands should NOT overlap. Any weight that falls outside all bands, or
+#     inside more than one band, is recorded as "Unknown".
+#   - min_weight_lbs must be strictly less than max_weight_lbs.
+#   - Names are case-sensitive and must be unique.
+#
+# To apply changes after editing this file:
+#   - Future ingest runs will automatically use the updated bands.
+#   - To reclassify all historical data, re-run:  python migrate_csv.py
+#
+# Example for a single cat weighing approximately 9–10 lbs:
+
+[[cats]]
+name = "Whiskers"
+min_weight_lbs = 8.0
+max_weight_lbs = 11.0
+
+# Uncomment and adjust to add a second cat:
+# [[cats]]
+# name = "Shadow"
+# min_weight_lbs = 12.0
+# max_weight_lbs = 15.0
