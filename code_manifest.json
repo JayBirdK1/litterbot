@@ -1,0 +1,27 @@
+{
+  "agent": "coder",
+  "project": "Litter-Robot 4 Pet Health Tracker & Dashboard",
+  "timestamp": "2026-03-07T14:16:24Z",
+  "milestones": [
+    {"id": "M1", "name": "SQLite Database Schema & Migration"},
+    {"id": "M2", "name": "Automated Fetch & Ingest Pipeline"},
+    {"id": "M3", "name": "Local API Server (Flask)"},
+    {"id": "M4", "name": "Auto-Loading Dashboard (Frontend)"},
+    {"id": "M5", "name": "Configuration, README & Bootstrap"}
+  ],
+  "files": [
+    {"milestone": "M1", "rel_path": "db.py"},
+    {"milestone": "M1", "rel_path": "cats.py"},
+    {"milestone": "M1", "rel_path": "summary.py"},
+    {"milestone": "M1", "rel_path": "migrate_csv.py"},
+    {"milestone": "M1", "rel_path": ".gitignore"},
+    {"milestone": "M2", "rel_path": "ingest.py"},
+    {"milestone": "M2", "rel_path": "run_ingest.py"},
+    {"milestone": "M2", "rel_path": "cats.toml"},
+    {"milestone": "M3", "rel_path": "app.py"},
+    {"milestone": "M4", "rel_path": "dashboard.html"},
+    {"milestone": "M5", "rel_path": "README.md"},
+    {"milestone": "M5", "rel_path": "requirements.txt"}
+  ],
+  "output_dir": "/home/jasonk/vibeCode/claudePull/litterbot"
+}
