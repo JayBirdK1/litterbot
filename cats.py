@@ -102,13 +102,45 @@ def classify_weight(
 
 def sync_to_db(conn, profiles: List[CatProfile]) -> None:
     """
-    Replace cat_profiles table contents with the given profiles.
+    Upsert cat_profiles from the given profiles list.
+    Profiles absent from the new list are removed after nullifying their
+    cat_id references in child tables, preserving historical data for cats
+    that still exist.
     Uses stable 1-indexed IDs so foreign keys in raw_events remain valid.
     Must be called inside a transaction.
     """
-    conn.execute("DELETE FROM cat_profiles")
+    new_ids = {p["id"] for p in profiles}
+
+    if new_ids:
+        placeholders = ",".join("?" * len(new_ids))
+        id_list = list(new_ids)
+        # Nullify references only for cats being removed, then delete them
+        conn.execute(
+            f"UPDATE raw_events SET cat_id = NULL WHERE cat_id NOT IN ({placeholders})",
+            id_list,
+        )
+        conn.execute(
+            f"UPDATE daily_summary SET cat_id = NULL WHERE cat_id NOT IN ({placeholders})",
+            id_list,
+        )
+        conn.execute(
+            f"DELETE FROM cat_profiles WHERE id NOT IN ({placeholders})",
+            id_list,
+        )
+    else:
+        conn.execute("UPDATE raw_events SET cat_id = NULL")
+        conn.execute("UPDATE daily_summary SET cat_id = NULL")
+        conn.execute("DELETE FROM cat_profiles")
+
     for p in profiles:
         conn.execute(
-            "INSERT INTO cat_profiles (id, name, min_weight_lbs, max_weight_lbs) VALUES (?, ?, ?, ?)",
+            """
+            INSERT INTO cat_profiles (id, name, min_weight_lbs, max_weight_lbs)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name           = excluded.name,
+                min_weight_lbs = excluded.min_weight_lbs,
+                max_weight_lbs = excluded.max_weight_lbs
+            """,
             (p["id"], p["name"], p["min_weight_lbs"], p["max_weight_lbs"]),
         )

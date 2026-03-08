@@ -17,8 +17,8 @@
 # Example for a single cat weighing approximately 9–10 lbs:
 
 [[cats]]
-name = "Whiskers"
-min_weight_lbs = 8.0
+name = "Tootsie"
+min_weight_lbs = 5.0
 max_weight_lbs = 11.0
 
 # Uncomment and adjust to add a second cat:
