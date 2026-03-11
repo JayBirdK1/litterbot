@@ -1,10 +1,11 @@
 """
 db.py — SQLite schema initialisation and connection helpers.
 
-Three tables:
+Four tables:
   cat_profiles  — identity + weight band per cat (loaded from cats.toml)
   raw_events    — every LR4 activity event, deduplicated by (robot_serial, timestamp_utc, action)
   daily_summary — pre-aggregated daily stats per robot and per cat
+  vomit_log     — manual daily vomit count for Tootsie (one row per date)
 
 Call init_db() once on startup (idempotent).
 """
@@ -97,6 +98,13 @@ def init_db(path: Path = DB_PATH) -> None:
             -- Unknown rows can coexist without a PRIMARY KEY on nullable columns.
             CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_summary_key
             ON daily_summary(date, robot_serial, COALESCE(cat_name, ''));
+
+            -- Manual vomit counter for Tootsie (one row per calendar date).
+            CREATE TABLE IF NOT EXISTS vomit_log (
+                date  TEXT    PRIMARY KEY,
+                count INTEGER NOT NULL DEFAULT 0
+                              CHECK(count >= 0)
+            );
         """)
     conn.close()
 

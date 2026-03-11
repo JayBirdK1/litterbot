@@ -22,7 +22,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, request
+from db import get_connection
 
 _BASE_DIR = Path(__file__).parent
 DB_PATH = _BASE_DIR / "litterbot.db"
@@ -202,6 +203,53 @@ def api_summary() -> Response:
 
         return jsonify({"days": days})
 
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/vomit")
+def api_vomit_get() -> Response:
+    if not _db_exists():
+        return jsonify({"counts": {}})
+    try:
+        conn = _get_conn()
+        try:
+            today = date.today()
+            start = (today - timedelta(days=29)).isoformat()
+            rows = conn.execute(
+                "SELECT date, count FROM vomit_log "
+                "WHERE date BETWEEN ? AND ? ORDER BY date DESC",
+                (start, today.isoformat()),
+            ).fetchall()
+        finally:
+            conn.close()
+        return jsonify({"counts": {r["date"]: r["count"] for r in rows}})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/vomit", methods=["POST"])
+def api_vomit_post() -> Response:
+    body     = request.get_json(silent=True) or {}
+    req_date = body.get("date")
+    delta    = body.get("delta")
+    if not req_date or delta not in (1, -1):
+        return jsonify({"error": "Requires JSON {date: 'YYYY-MM-DD', delta: 1|-1}"}), 400
+    try:
+        conn = get_connection()
+        try:
+            with conn:
+                conn.execute(
+                    """INSERT INTO vomit_log (date, count) VALUES (:date, MAX(0, :delta))
+                       ON CONFLICT(date) DO UPDATE SET count = MAX(0, count + :delta)""",
+                    {"date": req_date, "delta": delta},
+                )
+                row = conn.execute(
+                    "SELECT count FROM vomit_log WHERE date = ?", (req_date,)
+                ).fetchone()
+        finally:
+            conn.close()
+        return jsonify({"date": req_date, "count": row["count"] if row else 0})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 

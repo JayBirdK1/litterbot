@@ -269,6 +269,97 @@
     body { padding: 24px 16px 40px; }
     .chart-wrap { height: 280px; }
   }
+
+  /* ── Vomit panel ─────────────────────────────────────────────────────── */
+  .vomit-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 24px 28px;
+    margin-bottom: 24px;
+  }
+
+  .vomit-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .vomit-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  .vomit-date {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.08em;
+  }
+
+  .vomit-counter {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+
+  .vomit-btn {
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    font-family: 'Space Mono', monospace;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s, color 0.15s;
+    flex-shrink: 0;
+  }
+  .vomit-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .vomit-btn:disabled { opacity: 0.3; cursor: default; }
+  .vomit-btn:disabled:hover { border-color: var(--border); color: var(--dim); }
+
+  .vomit-count {
+    font-family: 'Space Mono', monospace;
+    font-size: 48px;
+    font-weight: 700;
+    color: #fff;
+    min-width: 60px;
+    text-align: center;
+    line-height: 1;
+  }
+
+  .vomit-history-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 10px;
+  }
+
+  .vomit-history-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .vomit-history-row {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+  }
+  .vomit-history-row.nonzero { color: #ff5e8a; }
 </style>
 </head>
 
@@ -322,6 +413,22 @@
     </div>
   </div>
 
+  <div class="vomit-panel">
+    <div class="vomit-header">
+      <span class="vomit-title">Vomit Log &mdash; Tootsie</span>
+      <span id="vomit-today-label" class="vomit-date"></span>
+    </div>
+    <div class="vomit-counter">
+      <button class="vomit-btn" id="vomit-minus" onclick="postVomit(-1)">&#8722;</button>
+      <div class="vomit-count" id="vomit-count-display">0</div>
+      <button class="vomit-btn" onclick="postVomit(1)">&#43;</button>
+    </div>
+    <div class="vomit-history">
+      <div class="vomit-history-title">Last 7 Days</div>
+      <ul class="vomit-history-list" id="vomit-history-list"></ul>
+    </div>
+  </div>
+
   <div class="chart-panel">
     <div class="chart-header">
       <span class="chart-title">Cat Weight &amp; Clean Cycles &mdash; Past 30 Days</span>
@@ -355,6 +462,7 @@ const CYCLES_COLOR  = '#ff7c3a';
 
 // ─── State ─────────────────────────────────────────────────────────────────────
 let chartInstance = null;
+let vomitCounts = {};
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 function hexToRgba(hex, a) {
@@ -404,17 +512,77 @@ function resetStats() {
     .forEach(id => setEl(id, null));
 }
 
+// ─── Vomit counter ─────────────────────────────────────────────────────────────
+function todayISO() {
+  const d = new Date();
+  return d.getFullYear() + '-'
+    + String(d.getMonth() + 1).padStart(2, '0') + '-'
+    + String(d.getDate()).padStart(2, '0');
+}
+
+function updateVomitUI() {
+  const today = todayISO();
+  const count = vomitCounts[today] || 0;
+  document.getElementById('vomit-today-label').textContent = today;
+  document.getElementById('vomit-count-display').textContent = count;
+  const minusBtn = document.getElementById('vomit-minus');
+  minusBtn.disabled = count === 0;
+
+  const list = document.getElementById('vomit-history-list');
+  list.innerHTML = '';
+  for (let i = 0; i < 7; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const iso = d.getFullYear() + '-'
+      + String(d.getMonth() + 1).padStart(2, '0') + '-'
+      + String(d.getDate()).padStart(2, '0');
+    const cnt = vomitCounts[iso] || 0;
+    const li = document.createElement('li');
+    li.className = 'vomit-history-row' + (cnt > 0 ? ' nonzero' : '');
+    li.innerHTML = `<span>${fmtLabel(iso)}</span><span>${cnt}</span>`;
+    list.appendChild(li);
+  }
+}
+
+async function postVomit(delta) {
+  const today = todayISO();
+  const prev = vomitCounts[today] || 0;
+  vomitCounts[today] = Math.max(0, prev + delta);
+  updateVomitUI();
+
+  try {
+    const res = await fetch('/api/vomit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({date: today, delta}),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      vomitCounts[today] = data.count;
+    } else {
+      vomitCounts[today] = prev;
+      console.error('postVomit error:', data.error);
+    }
+  } catch(err) {
+    vomitCounts[today] = prev;
+    console.error('postVomit fetch error:', err);
+  }
+  updateVomitUI();
+}
+
 // ─── Main load ─────────────────────────────────────────────────────────────────
 async function loadData() {
   setStatus('', 'loading\u2026');
   let summaryData, catsData;
 
+  let vomitData;
   try {
-    const [sRes, cRes] = await Promise.all([fetch('/api/summary'), fetch('/api/cats')]);
+    const [sRes, cRes, vRes] = await Promise.all([fetch('/api/summary'), fetch('/api/cats'), fetch('/api/vomit')]);
     if (!sRes.ok) throw new Error('/api/summary ' + sRes.status);
     if (!cRes.ok) throw new Error('/api/cats '    + cRes.status);
     summaryData = await sRes.json();
     catsData    = await cRes.json();
+    vomitData   = vRes.ok ? await vRes.json() : {counts: {}};
   } catch(err) {
     setStatus('error', 'fetch error');
     console.error('Dashboard:', err);
@@ -471,6 +639,9 @@ async function loadData() {
 
   updateStats(last30, dateMap, cleanCycles, weightSeries, visits);
   renderChart(last30, weightSeries, cleanCycles);
+
+  vomitCounts = (vomitData && vomitData.counts) ? vomitData.counts : {};
+  updateVomitUI();
 
   const now = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
   setStatus('live', 'updated ' + now);
@@ -635,6 +806,7 @@ function renderChart(dates, weightSeries, cleanCycles) {
 }
 
 // ─── Boot ──────────────────────────────────────────────────────────────────────
+updateVomitUI();  // render panel immediately while fetch is in flight
 loadData();
 setInterval(loadData, REFRESH_MS);
 </script>
