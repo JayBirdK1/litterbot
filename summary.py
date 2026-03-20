@@ -11,13 +11,17 @@ Row types written to daily_summary for each (date, robot_serial):
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set
 
+from cats import classify_weight
 
-CAT_DETECT_ACTIONS: frozenset = frozenset({"ROBOT_CAT_DETECT", "CAT_DETECTED"})
+CAT_DETECT_ACTIONS: frozenset = frozenset({"ROBOT_CAT_DETECT", "CAT_DETECTED", "CD"})
+
+_PET_WEIGHT_RE = re.compile(r'Pet\s+Weight\s+Recorded:\s*([\d.]+)', re.IGNORECASE)
 CLEAN_CYCLE_ACTIONS: frozenset = frozenset({"ROBOT_CLEAN_CYCLE_COMPLETE", "CLEAN_CYCLE_COMPLETE", "CCC"})
 
 
@@ -83,20 +87,49 @@ def recompute(
             cat_detect_counts: Dict = defaultdict(int)
             cat_weight_buckets: Dict = defaultdict(list)
 
-            for e in events:
+            # Pre-index weights from "Pet Weight Recorded: X.XX lbs" text events.
+            # These appear immediately after their associated CD event in sorted history.
+            pet_weight_by_idx: Dict[int, float] = {}
+            for _i, _e in enumerate(events):
+                _m = _PET_WEIGHT_RE.search(_e["action"] or "")
+                if _m:
+                    pet_weight_by_idx[_i] = float(_m.group(1))
+
+            # Map each CD event index to the next Pet Weight event within 5 positions.
+            cd_weights: Dict[int, float] = {}
+            for _i, _e in enumerate(events):
+                if (_e["action"] or "").strip().upper() in CAT_DETECT_ACTIONS:
+                    for _j in range(_i + 1, min(_i + 5, len(events))):
+                        if _j in pet_weight_by_idx:
+                            cd_weights[_i] = pet_weight_by_idx[_j]
+                            break
+
+            for i, e in enumerate(events):
                 action = (e["action"] or "").strip().upper()
 
                 if action in CLEAN_CYCLE_ACTIONS:
                     clean_cycles += 1
                 elif action in CAT_DETECT_ACTIONS:
                     total_cat_detects += 1
+                    # Use weight from Pet Weight Recorded event if available, else from column.
+                    w: Optional[float] = cd_weights.get(i)
+                    if w is None:
+                        raw_w = e["cat_weight_lbs"]
+                        if raw_w is not None and raw_w > 0:
+                            w = float(raw_w)
+                    # Re-classify by weight when a weight is available.
                     cat_id = e["cat_id"]
+                    if w is not None and w > 0 and cat_profiles:
+                        classified_id, _ = classify_weight(w, cat_profiles)
+                        if classified_id is not None:
+                            cat_id = classified_id
                     cat_name = cat_by_id.get(cat_id, "Unknown") if cat_id is not None else "Unknown"
                     key = (cat_id, cat_name)
                     cat_detect_counts[key] += 1
-                    w = e["cat_weight_lbs"]
                     if w is not None and w > 0:
-                        cat_weight_buckets[key].append(float(w))
+                        cat_weight_buckets[key].append(w)
+                elif _PET_WEIGHT_RE.search(e["action"] or ""):
+                    pass  # Weight already attributed to the preceding CD event; skip.
                 else:
                     other_events_count += 1
 
