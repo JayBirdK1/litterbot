@@ -1,0 +1,16 @@
+[Unit]
+Description=Litter-Robot Dashboard Server
+After=network.target
+
+[Service]
+Type=simple
+User=jay
+WorkingDirectory=/home/jay/Documents/litterbot
+ExecStart=/home/jay/Documents/litterbot/.venv/bin/python3 /home/jay/Documents/litterbot/app.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
